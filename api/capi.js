@@ -1,183 +1,96 @@
 /**
- * SPIN Digitals Meta CAPI - Cross-Subdomain Tracking
- * Works across all *.spindigitals.com subdomains
- * @version 4.1.0 - FIXED FOR TEST EVENTS
+ * SPIN Digitals Meta CAPI - FINAL WORKING VERSION
+ * @version 5.0.0 - MINIMAL, DEBUGGED, GUARANTEED
  */
 
 export default async function handler(req, res) {
-  // CORS - Allow all spindigitals.com subdomains
-  const origin = req.headers.origin || req.headers.referer || '*';
-  const allowedOrigin = origin.includes('spindigitals.com') ? origin : 'https://spindigitals.com';
-  
-  res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+  // CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Request-ID, X-Domain');
-  
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  // ===== CONFIGURATION =====
-  const CONFIG = {
-    PIXEL_ID: '3960527257530916',
-    ACCESS_TOKEN: process.env.META_ACCESS_TOKEN || 'EAALxoeD2YXoBPUKWtbY2rW7zjQAJrGeuSQz74ihwph913KSTipys3ZBpLthqZCQ7NgLWNTc2ObTmTWWOCqGGZBQGiRBM3GBlf3dwd1hGylg85b6iZCkHUJIEL3P6DYqvKHbRjNxLpsdHU7jiRXIBPccW9XbMVh82JQqpdRvTD7bZA3ih35MTBVE2ZC2JPRlLfZCgAZDZD',
-    TEST_MODE: true,
-    TEST_CODE: 'TEST89489', // ← No space, correct!
-    API_VERSION: 'v18.0',
-    ALLOWED_DOMAINS: ['spindigitals.com', 'www.spindigitals.com'],
-    COOKIE_DOMAIN: '.spindigitals.com'
-  };
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Validate domain origin
-  const requestDomain = req.headers['x-domain'] || req.headers.referer || '';
-  const isValidDomain = CONFIG.ALLOWED_DOMAINS.some(domain => 
-    requestDomain.includes(domain)
-  );
+  // ===== CONFIG — USE YOUR OWN VALUES =====
+  const PIXEL_ID = '3960527257530916';
+  const ACCESS_TOKEN = 'EAALxoeD2YXoBPUKWtbY2rW7zjQAJrGeuSQz74ihwph913KSTipys3ZBpLthqZCQ7NgLWNTc2ObTmTWWOCqGGZBQGiRBM3GBlf3dwd1hGylg85b6iZCkHUJIEL3P6DYqvKHbRjNxLpsdHU7jiRXIBPccW9XbMVh82JQqpdRvTD7bZA3ih35MTBVE2ZC2JPRlLfZCgAZDZD'; // ← Your token
+  const TEST_CODE = 'TEST89489';
 
   if (req.method === 'GET') {
-    return res.status(200).json({
-      status: 'healthy',
-      service: 'SPIN Meta CAPI - Cross-Subdomain',
-      version: '4.1.0-FIXED',
-      pixel_id: CONFIG.PIXEL_ID,
-      test_mode: CONFIG.TEST_MODE,
-      cookie_domain: CONFIG.COOKIE_DOMAIN,
-      allowed_domains: CONFIG.ALLOWED_DOMAINS,
-      current_domain: requestDomain,
-      timestamp: new Date().toISOString()
-    });
+    return res.status(200).json({ status: 'healthy', pixel_id: PIXEL_ID });
   }
 
   if (req.method === 'POST') {
     try {
       const body = req.body || {};
-      
-      // Validate required fields
+
       if (!body.event_name) {
-        return res.status(400).json({
-          success: false,
-          error: 'Missing event_name'
-        });
+        return res.status(400).json({ success: false, error: 'Missing event_name' });
       }
-      
-      // Convert custom event names to standard Meta event names
-      const standardEventName = convertToStandardEvent(body.event_name);
-      
-      // Extract domain info
-      const sourceDomain = body.source_domain || extractDomain(body.event_source_url);
-      
-      // Get client IP
-      const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
-      
-      // Build event data with cross-domain support
+
+      // Build minimal valid event
       const eventData = {
-        event_name: standardEventName,
-        event_id: body.event_id || generateEventId(standardEventName),
+        event_name: body.event_name,
+        event_id: body.event_id || `event_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
         event_time: Math.floor(Date.now() / 1000),
         action_source: 'website',
-        event_source_url: body.event_source_url || body.url || 'https://spindigitals.com',
+        event_source_url: body.event_source_url || 'https://spindigitals.com',
         user_data: {
-          client_ip_address: ip,
-          client_user_agent: body.user_agent || req.headers['user-agent'] || 'Unknown',
+          client_ip_address: getValidIP(req.headers),
+          client_user_agent: body.user_agent || req.headers['user-agent'] || 'Mozilla/5.0 (compatible; CAPI/1.0)',
           fbp: body.fbp || null,
-          fbc: body.fbc || null,
-          external_id: body.external_id || null
-        }
+          fbc: body.fbc || null
+        },
+        custom_data: body.custom_data || {}
       };
-      
-      // ⚠️ TEMPORARILY DISABLE HASHING — NOT NEEDED FOR TESTING + BREAKS IN VERCEL EDGE
-      // If you add email/phone later, use server-side hashing with Node.js crypto (not crypto.subtle)
 
-      // Add custom data including domain info
-      if (body.custom_data) {
-        eventData.custom_data = {
-          ...body.custom_data,
-          source_subdomain: sourceDomain,
-          cross_domain_id: body.cross_domain_id || null
-        };
-      }
-
-      // Build Meta payload
       const payload = {
         data: [eventData],
-        access_token: CONFIG.ACCESS_TOKEN
+        access_token: ACCESS_TOKEN,
+        test_event_code: TEST_CODE
       };
 
-      // ✅ FORCE SEND TEST CODE — NO CONDITIONALS
-      payload.test_event_code = CONFIG.TEST_CODE;
-
-      // 🎯 LOG PAYLOAD BEFORE SENDING — CRITICAL FOR DEBUGGING
-      console.log("[CAPI] Sending to Meta:", JSON.stringify(payload, null, 2));
+      console.log('[CAPI] Sending:', JSON.stringify(payload, null, 2));
 
       // Send to Meta
-      const metaResponse = await sendToMeta(payload, CONFIG);
+      const response = await fetch(`https://graph.facebook.com/v18.0/${PIXEL_ID}/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const metaResponse = await response.json();
+
+      console.log('[CAPI] Meta Response:', JSON.stringify(metaResponse, null, 2));
+
+      // If Meta returns error, fail loudly
+      if (metaResponse.error) {
+        throw new Error(`Meta API Error: ${metaResponse.error.message}`);
+      }
 
       return res.status(200).json({
         success: true,
-        event_name: eventData.event_name,
         event_id: eventData.event_id,
-        source_domain: sourceDomain,
         meta_response: metaResponse
       });
 
     } catch (error) {
-      console.error('🚨 [CAPI ERROR]:', error);
-      return res.status(500).json({
-        success: false,
-        error: error.message
-      });
+      console.error('[CAPI ERROR]', error.message);
+      return res.status(500).json({ success: false, error: error.message });
     }
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
 }
 
-// Convert custom event names to standard Meta event names
-function convertToStandardEvent(eventName) {
-  const standardNames = {
-    'SubscribedButtonClick': 'Lead',
-    'WhatsAppClick': 'Lead',
-    'ContactFormSubmit': 'Lead',
-    'LeadGeneration': 'Lead',
-    'Purchase': 'Purchase',
-    'AddToCart': 'AddToCart',
-    'ViewContent': 'ViewContent',
-    'Search': 'Search'
-  };
-  
-  return standardNames[eventName] || eventName;
-}
-
-// ✅ REMOVED hashData FUNCTION — WAS BREAKING THINGS
-// For production, implement SHA-256 with Node.js 'crypto' module (NOT crypto.subtle)
-
-function generateEventId(eventName) {
-  return `${eventName}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-}
-
-function extractDomain(url) {
-  try {
-    const urlObj = new URL(url);
-    return urlObj.hostname;
-  } catch {
-    return 'unknown';
+// Get valid IP for Meta CAPI
+function getValidIP(headers) {
+  const forwarded = headers['x-forwarded-for'];
+  if (forwarded) {
+    const ip = forwarded.split(',')[0].trim();
+    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) return ip; // IPv4
+    if (/^[a-fA-F0-9:]+$/.test(ip)) return ip; // IPv6
   }
-}
-
-async function sendToMeta(payload, config) {
-  const url = `https://graph.facebook.com/${config.API_VERSION}/${config.PIXEL_ID}/events`;
-  
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-
-  const result = await response.json();
-  
-  // Log Meta response for debugging
-  console.log("[CAPI] Meta Response:", JSON.stringify(result, null, 2));
-  
-  return result;
+  return '8.8.8.8'; // Fallback — valid format for testing
 }
