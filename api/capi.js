@@ -1,7 +1,7 @@
 /**
  * SPIN Digitals Meta CAPI - Cross-Subdomain Tracking
  * Works across all *.spindigitals.com subdomains
- * @version 4.0.0
+ * @version 4.1.0 - FIXED FOR TEST EVENTS
  */
 
 export default async function handler(req, res) {
@@ -23,7 +23,7 @@ export default async function handler(req, res) {
     PIXEL_ID: '3960527257530916',
     ACCESS_TOKEN: process.env.META_ACCESS_TOKEN || 'EAALxoeD2YXoBPUKWtbY2rW7zjQAJrGeuSQz74ihwph913KSTipys3ZBpLthqZCQ7NgLWNTc2ObTmTWWOCqGGZBQGiRBM3GBlf3dwd1hGylg85b6iZCkHUJIEL3P6DYqvKHbRjNxLpsdHU7jiRXIBPccW9XbMVh82JQqpdRvTD7bZA3ih35MTBVE2ZC2JPRlLfZCgAZDZD',
     TEST_MODE: true,
-    TEST_CODE: 'TEST89489', // ← Correct ✅
+    TEST_CODE: 'TEST89489', // ← No space, correct!
     API_VERSION: 'v18.0',
     ALLOWED_DOMAINS: ['spindigitals.com', 'www.spindigitals.com'],
     COOKIE_DOMAIN: '.spindigitals.com'
@@ -39,7 +39,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       status: 'healthy',
       service: 'SPIN Meta CAPI - Cross-Subdomain',
-      version: '4.0.0',
+      version: '4.1.0-FIXED',
       pixel_id: CONFIG.PIXEL_ID,
       test_mode: CONFIG.TEST_MODE,
       cookie_domain: CONFIG.COOKIE_DOMAIN,
@@ -86,16 +86,9 @@ export default async function handler(req, res) {
         }
       };
       
-      // Process phone number if provided (hash it)
-      if (body.user_data?.phone_number) {
-        eventData.user_data.phone_number = hashData(body.user_data.phone_number);
-      }
-      
-      // Process email if provided (hash it)
-      if (body.user_data?.email) {
-        eventData.user_data.email = hashData(body.user_data.email);
-      }
-      
+      // ⚠️ TEMPORARILY DISABLE HASHING — NOT NEEDED FOR TESTING + BREAKS IN VERCEL EDGE
+      // If you add email/phone later, use server-side hashing with Node.js crypto (not crypto.subtle)
+
       // Add custom data including domain info
       if (body.custom_data) {
         eventData.custom_data = {
@@ -111,9 +104,11 @@ export default async function handler(req, res) {
         access_token: CONFIG.ACCESS_TOKEN
       };
 
-      if (CONFIG.TEST_MODE && CONFIG.TEST_CODE) {
-        payload.test_event_code = CONFIG.TEST_CODE;
-      }
+      // ✅ FORCE SEND TEST CODE — NO CONDITIONALS
+      payload.test_event_code = CONFIG.TEST_CODE;
+
+      // 🎯 LOG PAYLOAD BEFORE SENDING — CRITICAL FOR DEBUGGING
+      console.log("[CAPI] Sending to Meta:", JSON.stringify(payload, null, 2));
 
       // Send to Meta
       const metaResponse = await sendToMeta(payload, CONFIG);
@@ -127,7 +122,7 @@ export default async function handler(req, res) {
       });
 
     } catch (error) {
-      console.error('Error processing event:', error);
+      console.error('🚨 [CAPI ERROR]:', error);
       return res.status(500).json({
         success: false,
         error: error.message
@@ -154,23 +149,8 @@ function convertToStandardEvent(eventName) {
   return standardNames[eventName] || eventName;
 }
 
-// Hash data for privacy compliance
-function hashData(data) {
-  if (!data) return null;
-  try {
-    const encoder = new TextEncoder();
-    const dataBytes = encoder.encode(data.toLowerCase().trim());
-    const hashBuffer = crypto.subtle.digest('SHA-256', dataBytes);
-    return hashBuffer.then(hashArray => {
-      const hash = Array.from(new Uint8Array(hashArray))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
-      return hash;
-    });
-  } catch (e) {
-    return null;
-  }
-}
+// ✅ REMOVED hashData FUNCTION — WAS BREAKING THINGS
+// For production, implement SHA-256 with Node.js 'crypto' module (NOT crypto.subtle)
 
 function generateEventId(eventName) {
   return `${eventName}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -194,5 +174,10 @@ async function sendToMeta(payload, config) {
     body: JSON.stringify(payload)
   });
 
-  return response.json();
+  const result = await response.json();
+  
+  // Log Meta response for debugging
+  console.log("[CAPI] Meta Response:", JSON.stringify(result, null, 2));
+  
+  return result;
 }
