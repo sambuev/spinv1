@@ -29,10 +29,10 @@ export default async function handler(req, res) {
 
   // 🔥 USE THIS EXACT PIXEL ID — VERIFIED AS CORRECT
   const CONFIG = {
-    PIXEL_ID: '1584644962920398', // ← DO NOT CHANGE
+    PIXEL_ID: '3960527257530916',
     ACCESS_TOKEN: 'EAALqDC4ZALQQBPWcVsPGTivZB7HxKrDiMLuCeEbZAklxGwNEgXjJgZB2O7sY7eyi9ppqrXYqKr8wm2EpQPMOLQoQXQplgRZACFOKDWIgsTUnqmoqJCqNPZCbkmi83H16McQ6RvyckPyfd9G7fZCRLGr0z38q06MTtkctmg4hBOMEx8S5utFpn28h66D6OBTsjKkE1GnRUC5sObFIvQXci5Yk5EsT8zBwctNOo6ER61s9jilu2J8ZBh4d',
     API_VERSION: 'v18.0',
-    USE_TEST_EVENTS: true, // Set to false ONLY after you see events in Test Events
+    USE_TEST_EVENTS: true,
     ALLOWED_EVENTS: ['PageView', 'Lead']
   };
 
@@ -78,7 +78,7 @@ export default async function handler(req, res) {
         event_id: body.event_id || `${body.event_name}_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,
         action_source: 'website',
         event_source_url: body.event_source_url || 'https://spindigitals.com/egypt',
-        user_ {
+        user_data: {
           client_ip_address: clientIP,
           client_user_agent: body.user_agent || req.headers['user-agent'] || 'Unknown'
         }
@@ -97,7 +97,7 @@ export default async function handler(req, res) {
 
       // Construct payload
       const payload = {
-         [eventData],
+        data: [eventData],
         access_token: CONFIG.ACCESS_TOKEN
       };
 
