@@ -1,253 +1,168 @@
 /**
- * SPIN Digitals - Client-side Facebook CAPI Tracking
- * For PageViews and Lead tracking via CAPI
+ * SPIN Digitals Meta CAPI - VERCEL CORS FIXED VERSION
+ * @version 6.0.4 - Fixed CORS for Vercel deployment
  */
 
-class SpinCAPITracker {
-  constructor() {
-    this.apiEndpoint = 'https://spinv1.vercel.app/api/capi';
-    this.fbp = this.getFBP();
-    this.fbc = this.getFBC();
-    this.initialized = false;
-    
-    // Debug mode - set to false in production
-    this.debug = true;
+export default async function handler(req, res) {
+  console.log('[CAPI] Request received:', req.method, req.url);
+  console.log('[CAPI] Request headers:', req.headers);
+
+  // Set CORS headers FIRST - before any other logic
+  res.setHeader('Access-Control-Allow-Origin', 'https://spindigitals.com');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With, Authorization');
+
+  console.log('[CAPI] CORS headers set');
+
+  // Handle preflight OPTIONS request
+  if (req.method === 'OPTIONS') {
+    console.log('[CAPI] Handling OPTIONS preflight request');
+    res.status(200).end();
+    return;
   }
 
-  // Get Facebook Browser ID (_fbp cookie)
-  getFBP() {
-    const fbpCookie = document.cookie
-      .split('; ')
-      .find(row => row.startsWith('_fbp='));
-    
-    if (fbpCookie) {
-      return fbpCookie.split('=')[1];
-    }
-    
-    // If no _fbp cookie exists, Facebook pixel should create one
-    // Check if fbq is loaded and try to get it
-    if (typeof fbq !== 'undefined') {
-      // Facebook pixel is loaded, cookie should exist soon
-      return null;
-    }
-    
-    return null;
+  // Configuration
+  const CONFIG = {
+    PIXEL_ID: '3960527257530916',
+    ACCESS_TOKEN: 'EAALxoeD2YXoBPUKWtbY2rW7zjQAJrGeuSQz74ihwph913KSTipys3ZBpLthqZCQ7NgLWNTc2ObTmTWWOCqGGZBQGiRBM3GBlf3dwd1hGylg85b6iZCkHUJIEL3P6DYqvKHbRjNxLpsdHU7jiRXIBPccW9XbMVh82JQqpdRvTD7bZA3ih35MTBVE2ZC2JPRlLfZCgAZDZD',
+    API_VERSION: 'v18.0'
+  };
+
+  // Health check
+  if (req.method === 'GET') {
+    console.log('[CAPI] GET health check request');
+    return res.status(200).json({
+      status: 'healthy',
+      pixel_id: CONFIG.PIXEL_ID,
+      timestamp: new Date().toISOString(),
+      cors: 'enabled'
+    });
   }
 
-  // Get Facebook Click ID (_fbc cookie)
-  getFBC() {
-    const fbcCookie = document.cookie
-      .split('; ')
-      .find(row => row.startsWith('_fbc='));
+  // Handle POST requests
+  if (req.method === 'POST') {
+    console.log('[CAPI] POST request - processing event');
     
-    if (fbcCookie) {
-      return fbcCookie.split('=')[1];
-    }
-    
-    // Check URL for fbclid parameter
-    const urlParams = new URLSearchParams(window.location.search);
-    const fbclid = urlParams.get('fbclid');
-    if (fbclid) {
-      // Create _fbc value: version.subdomainIndex.creationTime.fbclid
-      const timestamp = Math.floor(Date.now() / 1000);
-      return `fb.1.${timestamp}.${fbclid}`;
-    }
-    
-    return null;
-  }
-
-  // Log debug messages
-  log(message, data = {}) {
-    if (this.debug) {
-      console.log(`[SPIN CAPI] ${message}`, data);
-    }
-  }
-
-  // Send event to CAPI
-  async sendEvent(eventName, customData = {}) {
-    const eventData = {
-      event_name: eventName,
-      event_time: Math.floor(Date.now() / 1000),
-      event_source_url: window.location.href,
-      user_agent: navigator.userAgent,
-      fbp: this.fbp,
-      fbc: this.fbc,
-      custom_data: customData
-    };
-
-    this.log('Sending event', { eventName, customData, eventData });
-
     try {
-      const response = await fetch(this.apiEndpoint, {
+      // Parse request body
+      let body = req.body;
+      if (typeof body === 'string') {
+        body = JSON.parse(body);
+      }
+      
+      console.log('[CAPI] Request body parsed:', body);
+
+      if (!body || !body.event_name) {
+        console.log('[CAPI] Missing event_name');
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Missing event_name' 
+        });
+      }
+
+      // Build event data
+      const eventData = {
+        event_name: body.event_name === 'PageView' ? 'PageView' : 'Lead',
+        event_time: body.event_time || Math.floor(Date.now() / 1000),
+        action_source: 'website',
+        event_source_url: body.event_source_url || 'https://spindigitals.com',
+        user_data: {
+          client_ip_address: getClientIP(req),
+          client_user_agent: body.user_agent || req.headers['user-agent'] || 'Unknown'
+        }
+      };
+
+      // Add Facebook cookies
+      if (body.fbp) eventData.user_data.fbp = body.fbp;
+      if (body.fbc) eventData.user_data.fbc = body.fbc;
+
+      // Add custom data
+      if (body.custom_data) {
+        eventData.custom_data = body.custom_data;
+      }
+
+      // Generate event ID
+      eventData.event_id = `${eventData.event_name}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+
+      console.log('[CAPI] Event data prepared:', eventData);
+
+      // Send to Meta
+      const payload = {
+        data: [eventData],
+        access_token: CONFIG.ACCESS_TOKEN
+      };
+
+      const metaUrl = `https://graph.facebook.com/${CONFIG.API_VERSION}/${CONFIG.PIXEL_ID}/events`;
+      
+      console.log('[CAPI] Sending to Meta API...');
+      
+      const metaResponse = await fetch(metaUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest'
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify(eventData)
-        // Removed credentials: 'include' to avoid CORS issues
+        body: JSON.stringify(payload)
       });
 
-      this.log('Response status:', response.status);
+      const metaResult = await metaResponse.json();
+      
+      console.log('[CAPI] Meta response:', {
+        status: metaResponse.status,
+        result: metaResult
+      });
 
-      let result;
-      try {
-        result = await response.json();
-        this.log('Response body:', result);
-      } catch (parseError) {
-        this.log('Failed to parse response as JSON:', parseError.message);
-        throw new Error(`HTTP ${response.status}: Invalid JSON response`);
-      }
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${result.error || result.debug_message || 'Unknown error'}`);
-      }
-
-      if (result.success) {
-        this.log('Event sent successfully', {
-          event_id: result.event_id,
-          event_name: result.event_name,
-          meta_events_received: result.meta_events_received
+      if (!metaResponse.ok || metaResult.error) {
+        console.error('[CAPI] Meta API error:', metaResult);
+        return res.status(400).json({
+          success: false,
+          error: 'Meta API error',
+          details: metaResult
         });
-        return result;
-      } else {
-        throw new Error(result.error || 'Event failed');
       }
 
+      // Success
+      console.log('[CAPI] Event sent successfully');
+      return res.status(200).json({
+        success: true,
+        event_id: eventData.event_id,
+        event_name: eventData.event_name,
+        events_received: metaResult.events_received || 1
+      });
+
     } catch (error) {
-      console.error('[SPIN CAPI ERROR]', error.message);
+      console.error('[CAPI] Error processing request:', {
+        message: error.message,
+        stack: error.stack
+      });
       
-      // Test the health endpoint if main request fails
-      if (error.message.includes('500')) {
-        this.testHealthEndpoint();
-      }
-      
-      return { success: false, error: error.message };
+      return res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+        message: error.message
+      });
     }
   }
 
-  // Test health endpoint for debugging
-  async testHealthEndpoint() {
-    try {
-      this.log('Testing health endpoint...');
-      const response = await fetch(this.apiEndpoint, { method: 'GET' });
-      const result = await response.json();
-      this.log('Health check result:', result);
-    } catch (error) {
-      this.log('Health check failed:', error.message);
-    }
-  }
-
-  // Track PageView
-  async trackPageView() {
-    const customData = {
-      page_title: document.title,
-      page_url: window.location.href,
-      referrer: document.referrer || undefined
-    };
-
-    return await this.sendEvent('PageView', customData);
-  }
-
-  // Track Lead (button clicks, form submissions, etc.)
-  async trackLead(elementInfo = {}) {
-    const customData = {
-      content_name: elementInfo.text || elementInfo.id || 'Unknown',
-      content_category: elementInfo.category || 'lead',
-      page_url: window.location.href,
-      ...elementInfo // Allow custom properties
-    };
-
-    return await this.sendEvent('Lead', customData);
-  }
-
-  // Initialize tracking
-  async init() {
-    if (this.initialized) return;
-
-    this.log('Initializing SPIN CAPI Tracker');
-
-    // Check if page is loaded
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => this.init());
-      return;
-    }
-
-    // Track initial page view
-    await this.trackPageView();
-
-    // Set up automatic lead tracking for buttons and links
-    this.setupAutoTracking();
-
-    this.initialized = true;
-    this.log('SPIN CAPI Tracker initialized successfully');
-  }
-
-  // Setup automatic tracking for buttons and links
-  setupAutoTracking() {
-    // Track all buttons
-    document.querySelectorAll('button, [role="button"], .btn').forEach(button => {
-      button.addEventListener('click', (e) => {
-        const elementInfo = {
-          text: button.textContent?.trim() || button.value || 'Button',
-          id: button.id || undefined,
-          class: button.className || undefined,
-          category: 'button_click'
-        };
-        this.trackLead(elementInfo);
-      });
-    });
-
-    // Track important links (CTAs, contact, etc.)
-    document.querySelectorAll('a[href*="contact"], a[href*="quote"], a[href*="demo"], a.cta').forEach(link => {
-      link.addEventListener('click', (e) => {
-        const elementInfo = {
-          text: link.textContent?.trim() || 'Link',
-          href: link.href,
-          id: link.id || undefined,
-          category: 'cta_click'
-        };
-        this.trackLead(elementInfo);
-      });
-    });
-
-    // Track form submissions
-    document.querySelectorAll('form').forEach(form => {
-      form.addEventListener('submit', (e) => {
-        const elementInfo = {
-          text: 'Form Submission',
-          id: form.id || undefined,
-          action: form.action || undefined,
-          category: 'form_submit'
-        };
-        this.trackLead(elementInfo);
-      });
-    });
-
-    this.log('Auto-tracking setup complete');
-  }
-
-  // Manual method to track specific elements (call this from your code)
-  trackElement(element, category = 'interaction') {
-    const elementInfo = {
-      text: element.textContent?.trim() || element.value || 'Element',
-      id: element.id || undefined,
-      class: element.className || undefined,
-      category: category
-    };
-    return this.trackLead(elementInfo);
-  }
+  // Method not allowed
+  console.log('[CAPI] Method not allowed:', req.method);
+  return res.status(405).json({ 
+    error: 'Method not allowed',
+    method: req.method
+  });
 }
 
-// Initialize tracker
-const spinTracker = new SpinCAPITracker();
-
-// Auto-initialize when script loads
-spinTracker.init();
-
-// Make available globally for manual tracking
-window.spinTracker = spinTracker;
-
-// Example usage:
-// window.spinTracker.trackLead({ text: 'Custom Button', category: 'special_cta' });
-// window.spinTracker.trackPageView(); // Manual page view
+// Get client IP
+function getClientIP(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  const realIP = req.headers['x-real-ip'];
+  const cfIP = req.headers['cf-connecting-ip'];
+  
+  console.log('[CAPI] IP headers:', { forwarded, realIP, cfIP });
+  
+  if (cfIP) return cfIP;
+  if (realIP) return realIP;
+  if (forwarded) return forwarded.split(',')[0].trim();
+  
+  return '127.0.0.1';
+}
