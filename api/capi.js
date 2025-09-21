@@ -101,7 +101,7 @@ export default async function handler(req, res) {
         access_token: CONFIG.ACCESS_TOKEN
       };
 
-      // Build API URL
+      // Build API URL — NO SPACES!
       const apiPath = CONFIG.USE_TEST_EVENTS
         ? `${CONFIG.PIXEL_ID}/events?test_event_code=TEST12345`
         : `${CONFIG.PIXEL_ID}/events`;
