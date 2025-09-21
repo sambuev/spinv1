@@ -33,7 +33,7 @@ export default async function handler(req, res) {
     ACCESS_TOKEN: 'EAALqDC4ZALQQBPWcVsPGTivZB7HxKrDiMLuCeEbZAklxGwNEgXjJgZB2O7sY7eyi9ppqrXYqKr8wm2EpQPMOLQoQXQplgRZACFOKDWIgsTUnqmoqJCqNPZCbkmi83H16McQ6RvyckPyfd9G7fZCRLGr0z38q06MTtkctmg4hBOMEx8S5utFpn28h66D6OBTsjKkE1GnRUC5sObFIvQXci5Yk5EsT8zBwctNOo6ER61s9jilu2J8ZBh4d',
     API_VERSION: 'v18.0',
     USE_TEST_EVENTS: false,
-    ALLOWED_EVENTS: ['PageView', 'Lead']
+    ALLOWED_EVENTS: ['PageView', 'Lead', 'Schedule']
   };
 
   // Health check
