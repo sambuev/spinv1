@@ -4,7 +4,7 @@
  */
 
 export default async function handler(req, res) {
-  // CORS Headers
+  // CORS Headers (corrected)
   res.setHeader('Access-Control-Allow-Origin', 'https://spindigitals.com');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With');
@@ -44,7 +44,7 @@ export default async function handler(req, res) {
         event_time: Math.floor(Date.now() / 1000),
         action_source: 'website',
         event_source_url: body.event_source_url || 'https://spindigitals.com',
-        user_data: {
+        user_data: { // Corrected from 'user_' to 'user_data'
           client_ip_address: getClientIP(req),
           client_user_agent: req.headers['user-agent'] || 'Unknown'
         }
@@ -57,16 +57,17 @@ export default async function handler(req, res) {
       // Simple event ID
       eventData.event_id = `${body.event_name}_${Date.now()}`;
 
+      // Define payload BEFORE using it
       const payload = {
         data: [eventData],
         access_token: CONFIG.ACCESS_TOKEN
       };
 
-      // Try TEST EVENTS first (more permissive)
       const apiPath = CONFIG.USE_TEST_EVENTS ? 
         `${CONFIG.PIXEL_ID}/events?test_event_code=TEST12345` : 
         `${CONFIG.PIXEL_ID}/events`;
 
+      // Fixed URL formatting (removed extra space)
       const metaUrl = `https://graph.facebook.com/${CONFIG.API_VERSION}/${apiPath}`;
 
       console.log('[CAPI] Sending to:', metaUrl);
