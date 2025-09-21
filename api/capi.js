@@ -1,7 +1,7 @@
 /**
  * SPIN Digitals Meta CAPI - Cross-Subdomain Tracking
  * Works across all *.spindigitals.com subdomains
- * @version 3.0.0
+ * @version 4.0.0
  */
 
 export default async function handler(req, res) {
@@ -23,10 +23,10 @@ export default async function handler(req, res) {
     PIXEL_ID: '3960527257530916',
     ACCESS_TOKEN: process.env.META_ACCESS_TOKEN || 'EAALxoeD2YXoBPUKWtbY2rW7zjQAJrGeuSQz74ihwph913KSTipys3ZBpLthqZCQ7NgLWNTc2ObTmTWWOCqGGZBQGiRBM3GBlf3dwd1hGylg85b6iZCkHUJIEL3P6DYqvKHbRjNxLpsdHU7jiRXIBPccW9XbMVh82JQqpdRvTD7bZA3ih35MTBVE2ZC2JPRlLfZCgAZDZD',
     TEST_MODE: true,
-    TEST_CODE: ' TEST89489',
+    TEST_CODE: 'TEST89489',
     API_VERSION: 'v18.0',
-    ALLOWED_DOMAINS: ['spindigitals.com', 'www.spindigitals.com'], // Add all your domains
-    COOKIE_DOMAIN: '.spindigitals.com' // Works for all subdomains
+    ALLOWED_DOMAINS: ['spindigitals.com', 'www.spindigitals.com'],
+    COOKIE_DOMAIN: '.spindigitals.com'
   };
 
   // Validate domain origin
@@ -39,7 +39,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       status: 'healthy',
       service: 'SPIN Meta CAPI - Cross-Subdomain',
-      version: '3.0.0',
+      version: '4.0.0',
       pixel_id: CONFIG.PIXEL_ID,
       test_mode: CONFIG.TEST_MODE,
       cookie_domain: CONFIG.COOKIE_DOMAIN,
@@ -53,6 +53,17 @@ export default async function handler(req, res) {
     try {
       const body = req.body || {};
       
+      // Validate required fields
+      if (!body.event_name) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing event_name'
+        });
+      }
+      
+      // Convert custom event names to standard Meta event names
+      const standardEventName = convertToStandardEvent(body.event_name);
+      
       // Extract domain info
       const sourceDomain = body.source_domain || extractDomain(body.event_source_url);
       
@@ -61,8 +72,8 @@ export default async function handler(req, res) {
       
       // Build event data with cross-domain support
       const eventData = {
-        event_name: body.event_name || 'PageView',
-        event_id: body.event_id || generateEventId(body.event_name),
+        event_name: standardEventName,
+        event_id: body.event_id || generateEventId(standardEventName),
         event_time: Math.floor(Date.now() / 1000),
         action_source: 'website',
         event_source_url: body.event_source_url || body.url || 'https://spindigitals.com',
@@ -71,10 +82,20 @@ export default async function handler(req, res) {
           client_user_agent: body.user_agent || req.headers['user-agent'] || 'Unknown',
           fbp: body.fbp || null,
           fbc: body.fbc || null,
-          external_id: body.external_id || null // Cross-subdomain user ID
+          external_id: body.external_id || null
         }
       };
-
+      
+      // Process phone number if provided (hash it)
+      if (body.user_data?.phone_number) {
+        eventData.user_data.phone_number = hashData(body.user_data.phone_number);
+      }
+      
+      // Process email if provided (hash it)
+      if (body.user_data?.email) {
+        eventData.user_data.email = hashData(body.user_data.email);
+      }
+      
       // Add custom data including domain info
       if (body.custom_data) {
         eventData.custom_data = {
@@ -115,6 +136,40 @@ export default async function handler(req, res) {
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
+}
+
+// Convert custom event names to standard Meta event names
+function convertToStandardEvent(eventName) {
+  const standardNames = {
+    'SubscribedButtonClick': 'Lead',
+    'WhatsAppClick': 'Lead',
+    'ContactFormSubmit': 'Lead',
+    'LeadGeneration': 'Lead',
+    'Purchase': 'Purchase',
+    'AddToCart': 'AddToCart',
+    'ViewContent': 'ViewContent',
+    'Search': 'Search'
+  };
+  
+  return standardNames[eventName] || eventName;
+}
+
+// Hash data for privacy compliance
+function hashData(data) {
+  if (!data) return null;
+  try {
+    const encoder = new TextEncoder();
+    const dataBytes = encoder.encode(data.toLowerCase().trim());
+    const hashBuffer = crypto.subtle.digest('SHA-256', dataBytes);
+    return hashBuffer.then(hashArray => {
+      const hash = Array.from(new Uint8Array(hashArray))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+      return hash;
+    });
+  } catch (e) {
+    return null;
+  }
 }
 
 function generateEventId(eventName) {
