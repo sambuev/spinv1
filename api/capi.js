@@ -1,12 +1,11 @@
 /**
- * SPIN Digitals Meta CAPI - MINIMAL PRODUCTION VERSION
- * Tracks ONLY PageView and Lead events.
- * Uses your valid access token with ads_management scope.
- * Test events enabled by default for safe debugging.
+ * SPIN Digitals Meta CAPI - FINAL PRODUCTION VERSION
+ * Tracks ONLY PageView and Lead events from https://spindigitals.com/egypt
+ * Uses your valid access token and correct Pixel ID.
  */
 
 export default async function handler(req, res) {
-  // CORS — restrict to your domains
+  // CORS — allow only your domains
   const origin = req.headers.origin;
   const allowedOrigins = [
     'https://spindigitals.com',
@@ -28,13 +27,13 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // CONFIG — USE YOUR VALID TOKEN BELOW
+  // 🔥 USE THIS EXACT PIXEL ID — VERIFIED AS CORRECT
   const CONFIG = {
-    PIXEL_ID: '1584644962920398', // ✅ Verify this matches your Pixel in Events Manager
-    ACCESS_TOKEN: 'EAALqDC4ZALQQBPY4InLfn7pSMuD00515oigza3znZAt1K3rSQnzZBHFWFiSqSeVvFsvVLK0nq7HjDtSrIvRLbkHhAmecvFSESJTjEqrx2A1AZBfDaK4jcAkSkGYtt0a3FKVWBP1yCMj0eIBDJF7uZATZB7iE6n67i3qk1XCtzsvuR16a9VECDhblEIqmgVgqxuZBwZDZD',
+    PIXEL_ID: '3960527257530916', // ← DO NOT CHANGE — this is your real Pixel
+    ACCESS_TOKEN: 'EAALqDC4ZALQQBPWcVsPGTivZB7HxKrDiMLuCeEbZAklxGwNEgXjJgZB2O7sY7eyi9ppqrXYqKr8wm2EpQPMOLQoQXQplgRZACFOKDWIgsTUnqmoqJCqNPZCbkmi83H16McQ6RvyckPyfd9G7fZCRLGr0z38q06MTtkctmg4hBOMEx8S5utFpn28h66D6OBTsjKkE1GnRUC5sObFIvQXci5Yk5EsT8zBwctNOo6ER61s9jilu2J8ZBh4d',
     API_VERSION: 'v18.0',
-    USE_TEST_EVENTS: true, // ✅ Keep this true until you confirm live events work
-    ALLOWED_EVENTS: ['PageView', 'Lead'] // Only allow these two events
+    USE_TEST_EVENTS: true, // Set to false ONLY after you see events in Test Events
+    ALLOWED_EVENTS: ['PageView', 'Lead']
   };
 
   // Health check
@@ -43,7 +42,6 @@ export default async function handler(req, res) {
       status: 'healthy',
       pixel_id: CONFIG.PIXEL_ID,
       test_mode: CONFIG.USE_TEST_EVENTS,
-      token_valid: true,
       api_version: CONFIG.API_VERSION
     });
   }
@@ -53,15 +51,11 @@ export default async function handler(req, res) {
     try {
       const body = req.body || {};
 
-      // Validate event_name
-      if (!body.event_name) {
-        return res.status(400).json({ success: false, error: 'Missing event_name' });
-      }
-
-      if (!CONFIG.ALLOWED_EVENTS.includes(body.event_name)) {
+      // Validate event
+      if (!body.event_name || !CONFIG.ALLOWED_EVENTS.includes(body.event_name)) {
         return res.status(400).json({
           success: false,
-          error: `Event "${body.event_name}" not allowed. Only: ${CONFIG.ALLOWED_EVENTS.join(', ')}`
+          error: `Invalid event_name. Allowed: ${CONFIG.ALLOWED_EVENTS.join(', ')}`
         });
       }
 
@@ -84,83 +78,48 @@ export default async function handler(req, res) {
         event_id: body.event_id || `${body.event_name}_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,
         action_source: 'website',
         event_source_url: body.event_source_url || 'https://spindigitals.com/egypt',
-        user_data: {
+        user_ {
           client_ip_address: clientIP,
           client_user_agent: body.user_agent || req.headers['user-agent'] || 'Unknown'
         }
       };
 
-      // Add Facebook cookies if present
+      // Add Facebook cookies
       if (body.fbp) eventData.user_data.fbp = body.fbp;
       if (body.fbc) eventData.user_data.fbc = body.fbc;
 
-      // Optional: Hash email/phone if provided (for privacy compliance)
-      if (body.email) {
-        eventData.user_data.email = hashData(body.email);
-      }
-      if (body.phone_number) {
-        eventData.user_data.phone_number = hashData(body.phone_number);
-      }
+      // Optional: Hash email/phone for privacy (if provided)
+      if (body.email) eventData.user_data.email = await hashData(body.email);
+      if (body.phone_number) eventData.user_data.phone_number = await hashData(body.phone_number);
 
-      // Optional custom data
-      if (body.custom_data) {
-        eventData.custom_data = { ...body.custom_data };
-      }
+      // Add custom data
+      if (body.custom_data) eventData.custom_data = { ...body.custom_data };
 
       // Construct payload
       const payload = {
-        data: [eventData],
+         [eventData],
         access_token: CONFIG.ACCESS_TOKEN
       };
 
-      // Build API URL — no extra spaces!
+      // Build API URL
       const apiPath = CONFIG.USE_TEST_EVENTS
         ? `${CONFIG.PIXEL_ID}/events?test_event_code=TEST12345`
         : `${CONFIG.PIXEL_ID}/events`;
 
       const metaUrl = `https://graph.facebook.com/${CONFIG.API_VERSION}/${apiPath}`;
 
-      // Log for debugging (remove in production)
-      console.log('[CAPI] Sending to:', metaUrl);
-      console.log('[CAPI] Payload:', JSON.stringify(payload, null, 2));
-
       // Send to Meta
       const response = await fetch(metaUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-        // Timeout for safety
         signal: AbortSignal.timeout(5000)
       });
 
       const result = await response.json();
 
-      // Handle response
       if (!response.ok || result.error) {
         console.error('[CAPI] Meta API Error:', result.error);
-
-        // If test events fail, try live (unlikely, but for safety)
-        if (CONFIG.USE_TEST_EVENTS) {
-          console.log('[CAPI] Retrying as live event...');
-          const liveUrl = `https://graph.facebook.com/${CONFIG.API_VERSION}/${CONFIG.PIXEL_ID}/events`;
-          const liveResponse = await fetch(liveUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(5000)
-          });
-          const liveResult = await liveResponse.json();
-          if (liveResponse.ok && !liveResult.error) {
-            return res.status(200).json({
-              success: true,
-              event_id: eventData.event_id,
-              event_name: eventData.event_name,
-              mode: 'LIVE',
-              note: 'Test event failed, sent as live'
-            });
-          }
-        }
-
         return res.status(400).json({
           success: false,
           error: 'Meta API rejected event',
@@ -168,7 +127,6 @@ export default async function handler(req, res) {
         });
       }
 
-      // Success!
       return res.status(200).json({
         success: true,
         event_id: eventData.event_id,
@@ -187,21 +145,17 @@ export default async function handler(req, res) {
     }
   }
 
-  // Method not allowed
   return res.status(405).json({ error: 'Method not allowed' });
 }
 
-// SHA-256 Hash Function (sync version for Vercel Edge)
-function hashData(data) {
+// SHA-256 Hash Function (for email/phone privacy)
+async function hashData(data) {
   if (!data || typeof data !== 'string') return null;
   try {
     const encoder = new TextEncoder();
-    const dataBytes = encoder.encode(data.toLowerCase().trim());
-    const hashBuffer = crypto.subtle.digest('SHA-256', dataBytes);
-    return hashBuffer.then(hash => {
-      const hashArray = Array.from(new Uint8Array(hash));
-      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    });
+    const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(data.toLowerCase().trim()));
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   } catch (e) {
     console.warn('[CAPI] Hashing failed:', e.message);
     return null;
