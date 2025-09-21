@@ -30,7 +30,7 @@ export default async function handler(req, res) {
 
   // CONFIG — USE YOUR VALID TOKEN BELOW
   const CONFIG = {
-    PIXEL_ID: '3960527257530916', // ✅ Verify this matches your Pixel in Events Manager
+    PIXEL_ID: '1584644962920398', // ✅ Verify this matches your Pixel in Events Manager
     ACCESS_TOKEN: 'EAALqDC4ZALQQBPY4InLfn7pSMuD00515oigza3znZAt1K3rSQnzZBHFWFiSqSeVvFsvVLK0nq7HjDtSrIvRLbkHhAmecvFSESJTjEqrx2A1AZBfDaK4jcAkSkGYtt0a3FKVWBP1yCMj0eIBDJF7uZATZB7iE6n67i3qk1XCtzsvuR16a9VECDhblEIqmgVgqxuZBwZDZD',
     API_VERSION: 'v18.0',
     USE_TEST_EVENTS: true, // ✅ Keep this true until you confirm live events work
