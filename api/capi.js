@@ -1,10 +1,10 @@
 /**
- * SPIN Digitals Meta CAPI - MINIMAL VERSION
- * Works with basic permissions - Test Events approach
+ * SPIN Digitals Meta CAPI - FIXED VERSION
+ * Now properly sends test_event_code in request body
  */
 
 export default async function handler(req, res) {
-  // CORS Headers (corrected)
+  // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', 'https://spindigitals.com');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With');
@@ -18,7 +18,8 @@ export default async function handler(req, res) {
     PIXEL_ID: '3960527257530916',
     ACCESS_TOKEN: 'EAALxoeD2YXoBPaSkKA19qXkIYBQ7ttTz6ZCLMGz0Fop11o7SygCgdkOhhVGX3wzUznFK40vJQlm6gc3uw5m6zhlT8TwgJ8h9dzh23fVpefw77qKQZAYwXqHmsS70WB7rZBBJUXK7LCLxxe60gaHMRZBZAaLG4g3mQyQVR5gBqwsrRs5efZBL6qH0MNXoTDIuAAeAZDZD',
     API_VERSION: 'v18.0',
-    USE_TEST_EVENTS: true // Try test events first
+    USE_TEST_EVENTS: true, // Keep true for testing
+    TEST_CODE: 'TEST89489' // ← Your actual test code
   };
 
   // Health check
@@ -44,7 +45,7 @@ export default async function handler(req, res) {
         event_time: Math.floor(Date.now() / 1000),
         action_source: 'website',
         event_source_url: body.event_source_url || 'https://spindigitals.com',
-        user_data: { // Corrected from 'user_' to 'user_data'
+        user_data: {
           client_ip_address: getClientIP(req),
           client_user_agent: req.headers['user-agent'] || 'Unknown'
         }
@@ -57,21 +58,21 @@ export default async function handler(req, res) {
       // Simple event ID
       eventData.event_id = `${body.event_name}_${Date.now()}`;
 
-      // Define payload BEFORE using it
+      // ✅ BUILD PAYLOAD WITH test_event_code IN BODY
       const payload = {
         data: [eventData],
         access_token: CONFIG.ACCESS_TOKEN
       };
 
-      const apiPath = CONFIG.USE_TEST_EVENTS ? 
-        `${CONFIG.PIXEL_ID}/events?test_event_code=TEST12345` : 
-        `${CONFIG.PIXEL_ID}/events`;
+      // ✅ ADD TEST CODE TO BODY, NOT URL
+      if (CONFIG.USE_TEST_EVENTS && CONFIG.TEST_CODE) {
+        payload.test_event_code = CONFIG.TEST_CODE;
+      }
 
-      // Fixed URL formatting (removed extra space)
-      const metaUrl = `https://graph.facebook.com/${CONFIG.API_VERSION}/${apiPath}`;
+      const metaUrl = `https://graph.facebook.com/${CONFIG.API_VERSION}/${CONFIG.PIXEL_ID}/events`;
 
       console.log('[CAPI] Sending to:', metaUrl);
-      console.log('[CAPI] Mode:', CONFIG.USE_TEST_EVENTS ? 'TEST' : 'LIVE');
+      console.log('[CAPI] Payload:', JSON.stringify(payload, null, 2));
 
       const response = await fetch(metaUrl, {
         method: 'POST',
@@ -81,33 +82,9 @@ export default async function handler(req, res) {
 
       const result = await response.json();
 
+      console.log('[CAPI] Meta Response:', JSON.stringify(result, null, 2));
+
       if (!response.ok) {
-        console.error('[CAPI] Error:', result);
-        
-        // If live events fail, automatically try test events
-        if (!CONFIG.USE_TEST_EVENTS) {
-          console.log('[CAPI] Retrying with test events...');
-          const testUrl = `https://graph.facebook.com/${CONFIG.API_VERSION}/${CONFIG.PIXEL_ID}/events?test_event_code=TEST12345`;
-          
-          const testResponse = await fetch(testUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          
-          const testResult = await testResponse.json();
-          
-          if (testResponse.ok) {
-            return res.status(200).json({
-              success: true,
-              event_id: eventData.event_id,
-              event_name: eventData.event_name,
-              mode: 'TEST_EVENTS',
-              note: 'Sent as test event - check Test Events in Events Manager'
-            });
-          }
-        }
-        
         return res.status(400).json({
           success: false,
           error: 'API error',
@@ -139,5 +116,5 @@ export default async function handler(req, res) {
 function getClientIP(req) {
   return req.headers['x-forwarded-for']?.split(',')[0] || 
          req.headers['x-real-ip'] || 
-         '127.0.0.1';
+         '8.8.8.8'; // ← Use valid IP for testing
 }
