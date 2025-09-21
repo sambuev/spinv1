@@ -29,7 +29,7 @@ export default async function handler(req, res) {
   // ===== CONFIGURATION =====
   const CONFIG = {
     PIXEL_ID: '3960527257530916',
-    ACCESS_TOKEN: process.env.META_ACCESS_TOKEN || 'EAALxoeD2YXoBPUKWtbY2rW7zjQAJrGeuSQz74ihwph913KSTipys3ZBpLthqZCQ7NgLWNTc2ObTmTWWOCqGGZBQGiRBM3GBlf3dwd1hGylg85b6iZCkHUJIEL3P6DYqvKHbRjNxLpsdHU7jiRXIBPccW9XbMVh82JQqpdRvTD7bZA3ih35MTBVE2ZC2JPRlLfZCgAZDZD', // ← Replace or use env var
+    ACCESS_TOKEN: 'EAALxoeD2YXoBPUKWtbY2rW7zjQAJrGeuSQz74ihwph913KSTipys3ZBpLthqZCQ7NgLWNTc2ObTmTWWOCqGGZBQGiRBM3GBlf3dwd1hGylg85b6iZCkHUJIEL3P6DYqvKHbRjNxLpsdHU7jiRXIBPccW9XbMVh82JQqpdRvTD7bZA3ih35MTBVE2ZC2JPRlLfZCgAZDZD', // hardcoded
     API_VERSION: 'v18.0',
     ALLOWED_DOMAINS: ['spindigitals.com', 'www.spindigitals.com'],
     MAX_EVENT_AGE_SECONDS: 7 * 24 * 60 * 60 // 7 days
